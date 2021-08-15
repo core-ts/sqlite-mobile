@@ -1,6 +1,10 @@
 import {Attribute, Attributes, Manager, Statement, StringMap} from './metadata';
 import {buildToSave, buildToSaveBatch} from './build';
 
+// tslint:disable-next-line:class-name
+export class resource {
+  static string?: boolean;
+}
 export class DatabaseManager implements Manager {
   constructor(public database: any) {
     this.exec = this.exec.bind(this);
@@ -48,29 +52,33 @@ export function execBatch(db: any, statements: Statement[]): Promise<number> {
         txn.executeSql(item.query, toArray(item.params));
       })
     }, (e: any) => {
-      console.log(e);
       reject(e);
     }, () => {
       resolve(1);
     });
   });
 }
+function buildError(err: any): any {
+  if (err.errno === 19 && err.code === 'SQLITE_CONSTRAINT') {
+    err.error = 'duplicate';
+  }
+  return err;
+}
 export function exec(db: any, sql: string, args?: any[]): Promise<number> {
-  const p = args ? toArray(args) : [];
-  console.log({p});
+  const p = toArray(args);
   return new Promise<number>((resolve, reject) => {
     return db.transaction(txn => {
       txn.executeSql(sql, p, () => {
         return resolve(1);
       }, (err: any) => {
-        console.log({ err });
-        return reject(0);
+        buildError(err);
+        return reject(err);
       });
     });
   });
 }
 export function query<T>(db: any, sql: string, args?: any[], m?: StringMap, bools?: Attribute[]): Promise<T[]> {
-  const p = args ? args : [];
+  const p = toArray(args);
   return new Promise<T[]>((resolve, reject) => {
     return db.transaction(txn => {
       txn.executeSql(sql, p, (tx, results: any) => {
@@ -82,7 +90,7 @@ export function query<T>(db: any, sql: string, args?: any[], m?: StringMap, bool
   });
 }
 export function queryOne<T>(db: any, sql: string, args?: any[], m?: StringMap, bools?: Attribute[]): Promise<T> {
-  const p = args ? args : [];
+  const p = toArray(args);
   return new Promise<T>((resolve, reject) => {
     return db.transaction(txn => {
       txn.executeSql(sql, p, (tx, result: any) => {
@@ -134,17 +142,30 @@ export function saveBatch<T>(db: any | ((statements: Statement[]) => Promise<num
     }
   }
 }
-export function toArray<T>(arr: T[]): T[] {
+export function toArray(arr: any[]): any[] {
   if (!arr || arr.length === 0) {
     return [];
   }
-  const p: T[] = [];
+  const p: any[] = [];
   const l = arr.length;
   for (let i = 0; i < l; i++) {
-    if (arr[i] === undefined) {
+    if (arr[i] === undefined || arr[i] == null) {
       p.push(null);
     } else {
-      p.push(arr[i]);
+      if (typeof arr[i] === 'object') {
+        if (arr[i] instanceof Date) {
+          p.push(arr[i]);
+        } else {
+          if (resource.string) {
+            const s: string = JSON.stringify(arr[i]);
+            p.push(s);
+          } else {
+            p.push(arr[i]);
+          }
+        }
+      } else {
+        p.push(arr[i]);
+      }
     }
   }
   return p;

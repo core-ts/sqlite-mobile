@@ -16,8 +16,8 @@ export interface Manager {
 }
 
 export type DataType = 'ObjectId' | 'date' | 'datetime' | 'time'
-  | 'boolean' | 'number' | 'integer' | 'string' | 'text'
-  | 'object' | 'array' | 'primitives' | 'binary';
+    | 'boolean' | 'number' | 'integer' | 'string' | 'text'
+    | 'object' | 'array' | 'primitives' | 'binary';
 export type FormatType = 'currency' | 'percentage' | 'email' | 'url' | 'phone' | 'fax' | 'ipv4' | 'ipv6';
 export type MatchType = 'equal' | 'prefix' | 'contain' | 'max' | 'min'; // contain: default for string, min: default for Date, number
 
@@ -31,7 +31,7 @@ export interface Attribute {
   field?: string;
   type?: DataType;
   match?: MatchType;
-  default?: string | number | Date;
+  default?: string|number|Date;
   key?: boolean;
   noinsert?: boolean;
   noupdate?: boolean;
@@ -42,11 +42,11 @@ export interface Attribute {
   max?: number;
   gt?: number;
   lt?: number;
-  exp?: RegExp | string;
+  exp?: RegExp|string;
   code?: string;
   typeof?: Attributes;
-  true?: string | number;
-  false?: string | number;
+  true?: string|number;
+  false?: string|number;
 }
 export interface Attributes {
   [key: string]: Attribute;

@@ -439,7 +439,7 @@ export class SqliteChecker {
   check(): Promise<AnyMap> {
     const obj = {} as AnyMap;
     const promise = new Promise<any>((resolve, reject) => {
-      this.db.get('select date();', (err, result) => {
+      this.db.get('select date()', (err, result) => {
         if (err) {
           return reject(err);
         } else {

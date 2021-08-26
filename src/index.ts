@@ -1,5 +1,5 @@
-import {Attribute, Attributes, Manager, Statement, StringMap} from './metadata';
-import {buildToSave, buildToSaveBatch} from './build';
+import { Attribute, Attributes, Manager, Statement, StringMap } from './metadata';
+import { buildToSave, buildToSaveBatch } from './build';
 
 // tslint:disable-next-line:class-name
 export class resource {
@@ -17,8 +17,8 @@ export class DatabaseManager implements Manager {
   exec(sql: string, args?: any[]): Promise<number> {
     return exec(this.database, sql, args);
   }
-  execBatch(statements: Statement[]): Promise<number> {
-    return execBatch(this.database, statements);
+  execBatch(statements: Statement[], firstSuccess?: boolean): Promise<number> {
+    return execBatch(this.database, statements, firstSuccess);
   }
   query<T>(sql: string, args?: any[], m?: StringMap, fields?: Attribute[]): Promise<T[]> {
     return query(this.database, sql, args, m, fields);
@@ -35,28 +35,64 @@ export class DatabaseManager implements Manager {
 }
 
 export function execute(db: any, sql: string): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    return db.transaction(txn => {
-      txn.executeSql(sql, [], () => {
+  if (db.executeSql) {
+    return new Promise<void>((resolve, reject) => {
+      db.executeSql(sql, [], () => {
         return resolve();
       }, (err: any) => {
         return reject(err);
       });
     });
-  });
-}
-export function execBatch(db: any, statements: Statement[]): Promise<number> {
-  return new Promise<number>((resolve, reject) => {
-    return db.transaction(txn => {
-      statements.forEach(item => {
-        txn.executeSql(item.query, toArray(item.params));
-      })
-    }, (e: any) => {
-      reject(e);
-    }, () => {
-      resolve(1);
+  } else {
+    return new Promise<void>((resolve, reject) => {
+      return db.transaction(txn => {
+        txn.executeSql(sql, [], () => {
+          return resolve();
+        });
+      }, (err: any) => {
+        return reject(err);
+      });
     });
-  });
+  }
+}
+export function execBatch(db: any, statements: Statement[], firstSuccess?: boolean): Promise<number> {
+  if (!statements || statements.length === 0) {
+    return Promise.resolve(0);
+  } else if (statements.length === 1) {
+    return exec(db, statements[0].query, statements[0].params);
+  }
+  if (firstSuccess) {
+    return new Promise<number>((resolve, reject) => {
+      return db.transaction(txn => {
+        return txn.executeSql(statements[0].query, statements[0].params, (tx, result) => {
+          if (result && result.rowsAffected > 0) {
+            let subs = statements.slice(1);
+            subs.forEach(item => {
+              txn.executeSql(item.query, toArray(item.params));
+            });
+          }
+        }, (err: any) => {
+          return reject(err);
+        });
+      }, (e: any) => {
+        reject(e);
+      }, () => {
+        resolve(1);
+      });
+    });
+  } else {
+    return new Promise<number>((resolve, reject) => {
+      return db.transaction(txn => {
+        statements.forEach(item => {
+          txn.executeSql(item.query, toArray(item.params));
+        })
+      }, (e: any) => {
+        reject(e);
+      }, () => {
+        resolve(1);
+      });
+    });
+  }
 }
 function buildError(err: any): any {
   if (err.errno === 19 && err.code === 'SQLITE_CONSTRAINT') {
@@ -64,46 +100,97 @@ function buildError(err: any): any {
   }
   return err;
 }
-export function exec(db: any, sql: string, args?: any[]): Promise<number> {
-  const p = toArray(args);
+export function getTransaction(db: any): Promise<any> {
   return new Promise<number>((resolve, reject) => {
     return db.transaction(txn => {
-      txn.executeSql(sql, p, () => {
-        return resolve(1);
-      }, (err: any) => {
-        buildError(err);
-        return reject(err);
-      });
+      return resolve(txn);
+    }, (e: any) => {
+      reject(e);
     });
   });
+}
+/**
+ * 
+ * @param db can be db or transaction
+ * @param sql 
+ * @param args 
+ */
+export function exec(db: any, sql: string, args?: any[]): Promise<number> {
+  const p = toArray(args);
+  if (db.executeSql) {
+    return new Promise<number>((resolve, reject) => {
+      db.executeSql(sql, p, (tx, result) => {
+        if (result && result.rowsAffected > 0) {
+          return resolve(1);
+        } else if (!result) {
+          return reject(0);
+        }
+      });
+    });
+  } else {
+    return new Promise<number>((resolve, reject) => {
+      return db.transaction(txn => {
+        txn.executeSql(sql, p, (tx, result) => {
+          if (result && result.rowsAffected > 0) {
+            return resolve(1);
+          }
+        });
+      }, (e: any) => {
+        buildError(e);
+        reject(e);
+      }, () => {
+        resolve(1);
+      });
+    });
+  }
 }
 export function query<T>(db: any, sql: string, args?: any[], m?: StringMap, bools?: Attribute[]): Promise<T[]> {
   const p = toArray(args);
-  return new Promise<T[]>((resolve, reject) => {
-    return db.transaction(txn => {
-      txn.executeSql(sql, p, (tx, results: any) => {
+  if (db.executeSql) {
+    return new Promise<T[]>((resolve, reject) => {
+      db.executeSql(sql, p, (tx, results: any) => {
         return resolve(handleResults<T>(results.rows._array, m, bools));
       });
-    }, (err: any) => {
-      reject(err);
     });
-  });
+  } else {
+    return new Promise<T[]>((resolve, reject) => {
+      return db.transaction(txn => {
+        txn.executeSql(sql, p, (tx, results: any) => {
+          return resolve(handleResults<T>(results.rows._array, m, bools));
+        });
+      }, (err: any) => {
+        reject(err);
+      });
+    });
+  }
 }
 export function queryOne<T>(db: any, sql: string, args?: any[], m?: StringMap, bools?: Attribute[]): Promise<T> {
   const p = toArray(args);
-  return new Promise<T>((resolve, reject) => {
-    return db.transaction(txn => {
-      txn.executeSql(sql, p, (tx, result: any) => {
+  if (db.executeSql) {
+    return new Promise<T>((resolve, reject) => {
+      db.executeSql(sql, p, (tx, result: any) => {
         if (result.rows && result.rows._array && result.rows.length > 0) {
-          return resolve(handleResult<T>(result.rows._array, m, bools));  
+          return resolve(handleResult<T>(result.rows._array, m, bools));
         } else {
           return resolve(null);
         }
       });
-    }, (err: any) => {
-      reject(err);
     });
-  });
+  } else {
+    return new Promise<T>((resolve, reject) => {
+      return db.transaction(txn => {
+        txn.executeSql(sql, p, (tx, result: any) => {
+          if (result.rows && result.rows._array && result.rows.length > 0) {
+            return resolve(handleResult<T>(result.rows._array, m, bools));
+          } else {
+            return resolve(null);
+          }
+        });
+      }, (err: any) => {
+        reject(err);
+      });
+    });
+  }
 }
 export function execScalar<T>(db: any, sql: string, args?: any[]): Promise<T> {
   return queryOne<T>(db, sql, args).then(r => {

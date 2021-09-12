@@ -14,23 +14,29 @@ export class DatabaseManager implements Manager {
     this.execScalar = this.execScalar.bind(this);
     this.count = this.count.bind(this);
   }
-  exec(sql: string, args?: any[]): Promise<number> {
-    return exec(this.database, sql, args);
+  exec(sql: string, args?: any[], ctx?: any): Promise<number> {
+    const p = (ctx ? ctx : this.database);
+    return exec(p, sql, args);
   }
-  execBatch(statements: Statement[], firstSuccess?: boolean): Promise<number> {
-    return execBatch(this.database, statements, firstSuccess);
+  execBatch(statements: Statement[], firstSuccess?: boolean, ctx?: any): Promise<number> {
+    const p = (ctx ? ctx : this.database);
+    return execBatch(p, statements, firstSuccess);
   }
-  query<T>(sql: string, args?: any[], m?: StringMap, fields?: Attribute[]): Promise<T[]> {
-    return query(this.database, sql, args, m, fields);
+  query<T>(sql: string, args?: any[], m?: StringMap, fields?: Attribute[], ctx?: any): Promise<T[]> {
+    const p = (ctx ? ctx : this.database);
+    return query(p, sql, args, m, fields);
   }
-  queryOne<T>(sql: string, args?: any[], m?: StringMap, fields?: Attribute[]): Promise<T> {
-    return queryOne(this.database, sql, args, m, fields);
+  queryOne<T>(sql: string, args?: any[], m?: StringMap, fields?: Attribute[], ctx?: any): Promise<T> {
+    const p = (ctx ? ctx : this.database);
+    return queryOne(p, sql, args, m, fields);
   }
-  execScalar<T>(sql: string, args?: any[]): Promise<T> {
-    return execScalar<T>(this.database, sql, args);
+  execScalar<T>(sql: string, args?: any[], ctx?: any): Promise<T> {
+    const p = (ctx ? ctx : this.database);
+    return execScalar<T>(p, sql, args);
   }
-  count(sql: string, args?: any[]): Promise<number> {
-    return count(this.database, sql, args);
+  count(sql: string, args?: any[], ctx?: any): Promise<number> {
+    const p = (ctx ? ctx : this.database);
+    return count(p, sql, args);
   }
 }
 

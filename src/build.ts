@@ -27,7 +27,7 @@ export function metadata(attrs: Attributes): Metadata {
   const ats: Attribute[] = [];
   const bools: Attribute[] = [];
   const fields: string[] = [];
-  let ver: string;
+  const m: Metadata = {keys: ats, fields};
   let isMap = false;
   for (const k of ks) {
     const attr = attrs[k];
@@ -42,7 +42,7 @@ export function metadata(attrs: Attributes): Metadata {
       bools.push(attr);
     }
     if (attr.version) {
-      ver = k;
+      m.version = k;
     }
     const field = (attr.field ? attr.field : k);
     const s = field.toLowerCase();
@@ -51,7 +51,6 @@ export function metadata(attrs: Attributes): Metadata {
       isMap = true;
     }
   }
-  const m: Metadata = { keys: ats, fields, version: ver };
   if (isMap) {
     m.map = mp;
   }
@@ -60,7 +59,7 @@ export function metadata(attrs: Attributes): Metadata {
   }
   return m;
 }
-export function buildToSave<T>(obj: T, table: string, attrs: Attributes, buildParam?: (i: number) => string, i?: number): Statement {
+export function buildToSave<T>(obj: T, table: string, attrs: Attributes, buildParam?: (i: number) => string, i?: number): Statement|undefined {
   if (!i) {
     i = 1;
   }
@@ -71,8 +70,9 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, buildPa
   const cols: string[] = [];
   const values: string[] = [];
   const args: any[] = [];
+  const o: any = obj;
   for (const k of ks) {
-    let v = obj[k];
+    let v = o[k];
     const attr = attrs[k];
     if (attr && !attr.ignored) {
       if (attr.default !== undefined && attr.default != null && (v === undefined || v == null)) {
@@ -92,10 +92,10 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, buildPa
           values.push(p);
           if (typeof v === 'boolean') {
             if (v === true) {
-              const v2 = (attr.true ? attr.true : '1');
+              const v2 = (attr.true ? attr.true : `'1'`);
               args.push(v2);
             } else {
-              const v2 = (attr.false ? attr.false : '0');
+              const v2 = (attr.false ? attr.false : `'0'`);
               args.push(v2);
             }
           } else {
@@ -106,13 +106,13 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, buildPa
     }
   }
   if (cols.length === 0) {
-    return null;
+    return undefined;
   } else {
     const query = `replace into ${table}(${cols.join(',')})values(${values.join(',')})`;
     return { query, params: args };
   }
 }
-export function buildToSaveBatch<T>(objs: T[], table: string, attrs: Attributes, buildParam?: (i: number) => string): Statement[] {
+export function buildToSaveBatch<T>(objs: T[], table: string, attrs: Attributes, buildParam?: (i: number) => string): Statement[]|undefined {
   if (!buildParam) {
     buildParam = param;
   }
@@ -120,7 +120,7 @@ export function buildToSaveBatch<T>(objs: T[], table: string, attrs: Attributes,
   const meta = metadata(attrs);
   const pks = meta.keys;
   if (!pks || pks.length === 0) {
-    return null;
+    return undefined;
   }
   const ks = Object.keys(attrs);
   for (const obj of objs) {
@@ -128,10 +128,11 @@ export function buildToSaveBatch<T>(objs: T[], table: string, attrs: Attributes,
     const cols: string[] = [];
     const values: string[] = [];
     const args: any[] = [];
+    const o: any = obj;
     for (const k of ks) {
       const attr = attrs[k];
       if (attr && !attr.ignored) {
-        let v = obj[k];
+        let v = o[k];
         if (attr.default !== undefined && attr.default != null && (v === undefined || v == null)) {
           v = attr.default;
         }
@@ -149,10 +150,10 @@ export function buildToSaveBatch<T>(objs: T[], table: string, attrs: Attributes,
             values.push(p);
             if (typeof v === 'boolean') {
               if (v === true) {
-                const v2 = (attr.true ? attr.true : '1');
+                const v2 = (attr.true ? attr.true : `'1'`);
                 args.push(v2);
               } else {
-                const v2 = (attr.false ? attr.false : '0');
+                const v2 = (attr.false ? attr.false : `'0'`);
                 args.push(v2);
               }
             } else {

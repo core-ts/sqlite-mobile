@@ -7,12 +7,17 @@ export class resource {
 }
 export class DatabaseManager implements Manager {
   constructor(public database: any) {
+    this.param = this.param.bind(this);
     this.exec = this.exec.bind(this);
     this.execBatch = this.execBatch.bind(this);
     this.query = this.query.bind(this);
     this.queryOne = this.queryOne.bind(this);
     this.execScalar = this.execScalar.bind(this);
     this.count = this.count.bind(this);
+  }
+  driver = 'sqlite';
+  param(i: number): string {
+    return '?';
   }
   exec(sql: string, args?: any[], ctx?: any): Promise<number> {
     const p = (ctx ? ctx : this.database);
@@ -26,7 +31,7 @@ export class DatabaseManager implements Manager {
     const p = (ctx ? ctx : this.database);
     return query(p, sql, args, m, fields);
   }
-  queryOne<T>(sql: string, args?: any[], m?: StringMap, fields?: Attribute[], ctx?: any): Promise<T> {
+  queryOne<T>(sql: string, args?: any[], m?: StringMap, fields?: Attribute[], ctx?: any): Promise<T|null> {
     const p = (ctx ? ctx : this.database);
     return queryOne(p, sql, args, m, fields);
   }
@@ -51,7 +56,7 @@ export function execute(db: any, sql: string): Promise<void> {
     });
   } else {
     return new Promise<void>((resolve, reject) => {
-      return db.transaction(txn => {
+      return db.transaction((txn: { executeSql: (arg0: string, arg1: never[], arg2: () => void) => void; }) => {
         txn.executeSql(sql, [], () => {
           return resolve();
         });
@@ -69,8 +74,8 @@ export function execBatch(db: any, statements: Statement[], firstSuccess?: boole
   }
   if (firstSuccess) {
     return new Promise<number>((resolve, reject) => {
-      return db.transaction(txn => {
-        return txn.executeSql(statements[0].query, statements[0].params, (tx, result) => {
+      return db.transaction((txn: any) => {
+        return txn.executeSql(statements[0].query, statements[0].params, (tx: any, result: { rowsAffected: number; }) => {
           if (result && result.rowsAffected > 0) {
             let subs = statements.slice(1);
             subs.forEach(item => {
@@ -88,7 +93,7 @@ export function execBatch(db: any, statements: Statement[], firstSuccess?: boole
     });
   } else {
     return new Promise<number>((resolve, reject) => {
-      return db.transaction(txn => {
+      return db.transaction((txn: { executeSql: (arg0: string, arg1: any[]) => void; }) => {
         statements.forEach(item => {
           txn.executeSql(item.query, toArray(item.params));
         })
@@ -108,7 +113,7 @@ function buildError(err: any): any {
 }
 export function getTransaction(db: any): Promise<any> {
   return new Promise<number>((resolve, reject) => {
-    return db.transaction(txn => {
+    return db.transaction((txn: number | PromiseLike<number>) => {
       return resolve(txn);
     }, (e: any) => {
       reject(e);
@@ -125,7 +130,7 @@ export function exec(db: any, sql: string, args?: any[]): Promise<number> {
   const p = toArray(args);
   if (db.executeSql) {
     return new Promise<number>((resolve, reject) => {
-      db.executeSql(sql, p, (tx, result) => {
+      db.executeSql(sql, p, (tx: any, result: { rowsAffected: number; }) => {
         if (result && result.rowsAffected > 0) {
           return resolve(1);
         } else if (!result) {
@@ -135,7 +140,7 @@ export function exec(db: any, sql: string, args?: any[]): Promise<number> {
     });
   } else {
     return new Promise<number>((resolve, reject) => {
-      return db.transaction(txn => {
+      return db.transaction((txn: { executeSql: (arg0: string, arg1: any[], arg2: (tx: any, result: any) => void) => void; }) => {
         txn.executeSql(sql, p, (tx, result) => {
           if (result && result.rowsAffected > 0) {
             return resolve(1);
@@ -154,13 +159,13 @@ export function query<T>(db: any, sql: string, args?: any[], m?: StringMap, bool
   const p = toArray(args);
   if (db.executeSql) {
     return new Promise<T[]>((resolve, reject) => {
-      db.executeSql(sql, p, (tx, results: any) => {
+      db.executeSql(sql, p, (_tx: any, results: any) => {
         return resolve(handleResults<T>(results.rows._array, m, bools));
       });
     });
   } else {
     return new Promise<T[]>((resolve, reject) => {
-      return db.transaction(txn => {
+      return db.transaction((txn: { executeSql: (arg0: string, arg1: any[], arg2: (tx: any, results: any) => void) => void; }) => {
         txn.executeSql(sql, p, (tx, results: any) => {
           return resolve(handleResults<T>(results.rows._array, m, bools));
         });
@@ -170,26 +175,26 @@ export function query<T>(db: any, sql: string, args?: any[], m?: StringMap, bool
     });
   }
 }
-export function queryOne<T>(db: any, sql: string, args?: any[], m?: StringMap, bools?: Attribute[]): Promise<T> {
+export function queryOne<T>(db: any, sql: string, args?: any[], m?: StringMap, bools?: Attribute[]): Promise<T|null> {
   const p = toArray(args);
   if (db.executeSql) {
     return new Promise<T>((resolve, reject) => {
-      db.executeSql(sql, p, (tx, result: any) => {
+      db.executeSql(sql, p, (_tx: any, result: any) => {
         if (result.rows && result.rows._array && result.rows.length > 0) {
           return resolve(handleResult<T>(result.rows._array, m, bools));
         } else {
-          return resolve(null);
+          return null;
         }
       });
     });
   } else {
     return new Promise<T>((resolve, reject) => {
-      return db.transaction(txn => {
+      return db.transaction((txn: { executeSql: (arg0: string, arg1: any[], arg2: (tx: any, result: any) => void) => void; }) => {
         txn.executeSql(sql, p, (tx, result: any) => {
           if (result.rows && result.rows._array && result.rows.length > 0) {
             return resolve(handleResult<T>(result.rows._array, m, bools));
           } else {
-            return resolve(null);
+            return null;
           }
         });
       }, (err: any) => {
@@ -204,7 +209,7 @@ export function execScalar<T>(db: any, sql: string, args?: any[]): Promise<T> {
       return null;
     } else {
       const keys = Object.keys(r);
-      return r[keys[0]];
+      return (r as any)[keys[0]];
     }
   });
 }
@@ -235,7 +240,7 @@ export function saveBatch<T>(db: any | ((statements: Statement[]) => Promise<num
     }
   }
 }
-export function toArray(arr: any[]): any[] {
+export function toArray(arr?: any[]): any[] {
   if (!arr || arr.length === 0) {
     return [];
   }
@@ -291,16 +296,19 @@ export function handleBool<T>(objs: T[], bools: Attribute[]): T[] {
     return objs;
   }
   for (const obj of objs) {
+    const o: any = obj;
     for (const field of bools) {
-      const value = obj[field.name];
-      if (value != null && value !== undefined) {
-        const b = field.true;
-        if (b == null || b === undefined) {
-          // tslint:disable-next-line:triple-equals
-          obj[field.name] = ('1' == value || 'T' == value || 'Y' == value || 'true' == value);
-        } else {
-          // tslint:disable-next-line:triple-equals
-          obj[field.name] = (value == b ? true : false);
+      if (field.name) {
+        const v = o[field.name];
+        if (typeof v !== 'boolean' && v != null && v !== undefined) {
+          const b = field.true;
+          if (b == null || b === undefined) {
+            // tslint:disable-next-line:triple-equals
+            o[field.name] = ('1' == v || 'T' == v || 'Y' == v);
+          } else {
+            // tslint:disable-next-line:triple-equals
+            o[field.name] = (v == b ? true : false);
+          }
         }
       }
     }
@@ -322,7 +330,7 @@ export function map<T>(obj: T, m?: StringMap): any {
     if (!k0) {
       k0 = key;
     }
-    obj2[k0] = obj[key];
+    obj2[k0] = (obj as any)[key];
   }
   return obj2;
 }
@@ -351,11 +359,11 @@ export function mapArray<T>(results: T[], m?: StringMap): T[] {
   }
   return objs;
 }
-export function getFields(fields: string[], all?: string[]): string[] {
+export function getFields(fields: string[], all?: string[]): string[]|undefined {
   if (!fields || fields.length === 0) {
     return undefined;
   }
-  const ext: string[] = [];
+  const ext: string [] = [];
   if (all) {
     for (const s of fields) {
       if (all.includes(s)) {
@@ -404,7 +412,7 @@ export class StringService {
   load(key: string, max: number): Promise<string[]> {
     const s = `select ${this.column} from ${this.table} where ${this.column} like ? order by ${this.column} limit ${max}`;
     return query(this.db, s, ['' + key + '%']).then(arr => {
-      return arr.map(i => i[this.column] as string);
+      return arr.map(i => (i as any)[this.column] as string);
     });
   }
   save(values: string[]): Promise<number> {
@@ -420,7 +428,7 @@ export class StringService {
   }
 }
 
-export function version(attrs: Attributes): Attribute {
+export function version(attrs: Attributes): Attribute|undefined {
   const ks = Object.keys(attrs);
   for (const k of ks) {
     const attr = attrs[k];
@@ -518,13 +526,11 @@ export interface AnyMap {
 }
 // tslint:disable-next-line:max-classes-per-file
 export class SqliteChecker {
-  constructor(private db: any, private service?: string, private timeout?: number) {
-    if (!this.timeout) {
-      this.timeout = 4200;
-    }
-    if (!this.service) {
-      this.service = 'sqlite';
-    }
+  timeout: number;
+  service: string;
+  constructor(private db: any, service?: string, timeout?: number) {
+    this.timeout = (timeout ? timeout : 4200);
+    this.service = (service ? service : 'sqlite');
     this.check = this.check.bind(this);
     this.name = this.name.bind(this);
     this.build = this.build.bind(this);
@@ -532,7 +538,7 @@ export class SqliteChecker {
   check(): Promise<AnyMap> {
     const obj = {} as AnyMap;
     const promise = new Promise<any>((resolve, reject) => {
-      this.db.get('select date()', (err, result) => {
+      this.db.get('select date()', (err: any, result: any) => {
         if (err) {
           return reject(err);
         } else {
